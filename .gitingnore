@@ -1,0 +1,21 @@
+# Training dataset
+dataset/
+
+# YOLO training output
+runs/
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+.venv/
+venv/
+
+# Temporary files
+*.tmp
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
