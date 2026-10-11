@@ -1,10 +1,10 @@
 import streamlit as st
-from ultralytics import YOLO
 from PIL import Image
 import numpy as np
 import os
 import html
 import textwrap
+from src.post_weld.yolo_detector import run_post_weld_model
 
 
 # ============================================================
@@ -13,14 +13,6 @@ import textwrap
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
-
-MODEL_PATH = os.path.join(
-    PROJECT_ROOT,
-    "models",
-    "weld_detector",
-    "weld_detector_best.pt"
-)
-
 
 # ============================================================
 # PAGE CONFIG
@@ -462,13 +454,6 @@ render_html(
 # ============================================================
 # LOAD MODEL
 # ============================================================
-
-@st.cache_resource
-def load_model():
-    return YOLO(MODEL_PATH)
-
-
-model = load_model()
 
 
 # ============================================================
@@ -964,38 +949,29 @@ with post_tab:
 
                 image_array = np.array(image)
 
-                raw_result = model.predict(
-                    source=image_array,
+                raw_output = run_post_weld_model(
+                    image_array,
                     conf=0.01,
-                    iou=0.45,
-                    verbose=False
-                )[0]
+                    iou=0.45
+                )
 
 
             detections = []
 
-            for box in raw_result.boxes:
-
-                cls = int(
-                    box.cls[0]
-                )
-
-                conf = float(
-                    box.conf[0]
-                )
+            for defect in raw_output["defects"]:
 
                 detections.append(
                     {
-                        "name": raw_result.names[cls],
-                        "confidence": conf
+                        "name": defect["name"],
+                        "confidence": defect["confidence"]
                     }
                 )
-
-
-            detections.sort(
-                key=lambda item: item["confidence"],
-                reverse=True
-            )
+    
+    
+                detections.sort(
+                    key=lambda item: item["confidence"],
+                    reverse=True
+                )
 
 
             # ====================================================
@@ -1155,19 +1131,14 @@ with post_tab:
                     )
 
 
-                    accepted_result = model.predict(
-                        source=image_array,
+                    accepted_output = run_post_weld_model(
+                        image_array,
                         conf=threshold,
-                        iou=0.45,
-                        verbose=False
-                    )[0]
+                        iou=0.45
+                    )
 
 
-                    overlay = accepted_result.plot()
-
-                    overlay = overlay[
-                        :, :, ::-1
-                    ]
+                    overlay = accepted_output["overlay"]
 
 
                     # =================================================

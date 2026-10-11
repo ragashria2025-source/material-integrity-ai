@@ -16,15 +16,17 @@ def run_post_weld_model(image, conf=0.20, iou=0.45):
     ----------
     image : PIL.Image.Image or numpy.ndarray
         Input weld image.
+
     conf : float
         Minimum detection confidence.
+
     iou : float
         IoU threshold for non-maximum suppression.
 
     Returns
     -------
     dict
-        Dictionary containing detected defects.
+        Dictionary containing detected defects and annotated image.
     """
 
     if isinstance(image, Image.Image):
@@ -45,7 +47,11 @@ def run_post_weld_model(image, conf=0.20, iou=0.45):
     for box in result.boxes:
         class_id = int(box.cls[0])
         confidence = float(box.conf[0])
-        bbox = [float(v) for v in box.xyxy[0].tolist()]
+
+        bbox = [
+            float(value)
+            for value in box.xyxy[0].tolist()
+        ]
 
         defects.append(
             {
@@ -56,6 +62,13 @@ def run_post_weld_model(image, conf=0.20, iou=0.45):
             }
         )
 
+    # Create annotated image with YOLO detections
+    overlay = result.plot()
+
+    # YOLO returns BGR; Streamlit expects RGB
+    overlay = overlay[:, :, ::-1]
+
     return {
-        "defects": defects
+        "defects": defects,
+        "overlay": overlay,
     }
