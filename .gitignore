@@ -14,3 +14,20 @@ __pycache__/
 Thumbs.db
 
 weld_surface_clean.zip
+
+# Dataset investigation / review artifacts
+crack_review/
+crack_review_sheets/
+good_crack_review/
+
+# Temporary analysis scripts
+analyze_conditions.py
+check_crack_labels.py
+check_groups.py
+clean_crack_labels.py
+compare_preweld.py
+diagnose_preweld.py
+inspect_preweld.py
+review_crack_annotations.py
+review_good_cracks.py
+visualize_crack_labels.py
