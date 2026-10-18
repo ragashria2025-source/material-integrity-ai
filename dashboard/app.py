@@ -1,40 +1,33 @@
 import streamlit as st
 from PIL import Image
 import numpy as np
-import os
 import html
 import textwrap
+
 from src.post_weld.yolo_detector import run_post_weld_model
+from src.pre_weld.crack_predictor import predict_crack_risk
+from src.pre_weld.process_config import (
+    get_process_names,
+    get_process_config,
+)
+from src.risk_engine import calculate_severity, preliminary_risk
 
-
-# ============================================================
-# PATHS
-# ============================================================
-
-CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-PROJECT_ROOT = os.path.abspath(os.path.join(CURRENT_DIR, ".."))
-
-# ============================================================
-# PAGE CONFIG
-# ============================================================
 
 st.set_page_config(
     page_title="Material Integrity AI",
     page_icon="⚙️",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
 )
 
 
 # ============================================================
 # SAFE HTML RENDERER
-# Prevents Streamlit from showing <div> as code
 # ============================================================
 
 def render_html(content):
-    st.html(
-        textwrap.dedent(content).strip()
-    )
+    st.html(textwrap.dedent(content).strip())
+
 
 # ============================================================
 # STYLING
@@ -43,8 +36,6 @@ def render_html(content):
 render_html(
     """
     <style>
-
-    /* Hide Streamlit's own top header */
     [data-testid="stHeader"] {
         display: none !important;
     }
@@ -74,7 +65,6 @@ render_html(
         color: #f5f7fb;
     }
 
-    /* Fix clipped header */
     .block-container {
         max-width: 1480px;
         padding-top: 3rem !important;
@@ -91,10 +81,6 @@ render_html(
     p {
         color: #cbd5e1;
     }
-
-    /* ======================================================
-       BRAND
-    ====================================================== */
 
     .brand-title {
         color: #ffffff;
@@ -113,50 +99,31 @@ render_html(
 
     .online-pill {
         display: inline-block;
-
         padding: 9px 15px;
-
         border-radius: 999px;
-
         background: rgba(34, 197, 94, 0.09);
         border: 1px solid rgba(34, 197, 94, 0.35);
-
         color: #6ee7a5;
-
         font-size: 12px;
         font-weight: 900;
         letter-spacing: 0.9px;
     }
 
-    /* ======================================================
-       SECTION TEXT
-    ====================================================== */
-
     .section-kicker {
         color: #8ba3c7;
-
         font-size: 12px;
         font-weight: 900;
-
         letter-spacing: 1.6px;
-
         margin-bottom: 9px;
     }
 
     .result-heading {
         color: #ffffff;
-
         font-size: clamp(30px, 3vw, 42px);
         font-weight: 950;
-
         line-height: 1.1;
-
         margin: 4px 0 22px 0;
     }
-
-    /* ======================================================
-       RESULT CARDS
-    ====================================================== */
 
     .summary-card {
         background:
@@ -167,41 +134,30 @@ render_html(
             );
 
         border: 1px solid #293648;
-
         border-radius: 16px;
-
         padding: 22px;
-
         min-height: 135px;
     }
 
     .summary-label {
         color: #91a0b4;
-
         font-size: 12px;
         font-weight: 900;
-
         letter-spacing: 1.2px;
-
         margin-bottom: 13px;
     }
 
     .summary-value {
         color: #ffffff;
-
         font-size: 28px;
         font-weight: 950;
-
         line-height: 1.12;
-
         word-break: break-word;
     }
 
     .summary-sub {
         color: #8290a3;
-
         margin-top: 9px;
-
         font-size: 13px;
         line-height: 1.35;
     }
@@ -226,15 +182,9 @@ render_html(
         color: #c5a6ff !important;
     }
 
-    /* ======================================================
-       BANNERS
-    ====================================================== */
-
     .banner {
         border-radius: 14px;
-
         padding: 18px 20px;
-
         font-size: 15px;
         line-height: 1.6;
     }
@@ -257,53 +207,36 @@ render_html(
         color: #ffc2c7;
     }
 
-    /* ======================================================
-       PANELS
-    ====================================================== */
-
     .panel {
         background: #0f1823;
-
         border: 1px solid #293648;
-
         border-radius: 16px;
-
         padding: 21px 23px;
-
         color: #d9e2ee;
-
         font-size: 16px;
         line-height: 1.75;
     }
 
     .context-label {
         color: #8191a6;
-
         font-size: 11px;
         font-weight: 900;
-
         letter-spacing: 1.2px;
-
         margin-bottom: 5px;
     }
 
     .context-value {
         color: #f1f5f9;
-
         font-size: 16px;
         font-weight: 650;
     }
 
     .detection-row {
         display: flex;
-
         align-items: center;
         justify-content: space-between;
-
         gap: 25px;
-
         padding: 12px 0;
-
         border-bottom: 1px solid #24303e;
     }
 
@@ -321,24 +254,16 @@ render_html(
         font-weight: 850;
     }
 
-    /* ======================================================
-       INPUTS
-    ====================================================== */
-
     [data-testid="stWidgetLabel"] p {
         color: #d6deea !important;
-
         font-size: 15px !important;
         font-weight: 750 !important;
     }
 
     div[data-baseweb="select"] > div {
         background: #111b27 !important;
-
         border: 1px solid #334155 !important;
-
         color: #ffffff !important;
-
         border-radius: 10px !important;
     }
 
@@ -348,11 +273,8 @@ render_html(
 
     [data-testid="stNumberInput"] input {
         background: #111b27 !important;
-
         color: #ffffff !important;
-
         font-size: 16px !important;
-
         border-color: #334155 !important;
     }
 
@@ -363,9 +285,7 @@ render_html(
 
     [data-testid="stFileUploader"] section {
         background: #111b27 !important;
-
         border: 1px dashed #3c4b60 !important;
-
         border-radius: 12px !important;
     }
 
@@ -375,29 +295,16 @@ render_html(
         color: #cbd5e1 !important;
     }
 
-    /* ======================================================
-       IMAGES
-    ====================================================== */
-
     [data-testid="stImage"] img {
         max-height: 520px;
-
         object-fit: contain;
-
         border-radius: 12px;
     }
 
-    /* ======================================================
-       BUTTON
-    ====================================================== */
-
     .stButton > button[kind="primary"] {
         width: 100%;
-
         min-height: 55px;
-
         border: none !important;
-
         border-radius: 12px !important;
 
         background:
@@ -408,28 +315,17 @@ render_html(
             ) !important;
 
         color: white !important;
-
         font-size: 15px !important;
         font-weight: 900 !important;
-
         letter-spacing: 0.4px;
     }
-
-    /* ======================================================
-       TABS
-    ====================================================== */
 
     button[data-baseweb="tab"] {
         font-size: 15px !important;
         font-weight: 800 !important;
     }
 
-    /* ======================================================
-       RESPONSIVE
-    ====================================================== */
-
     @media (max-width: 800px) {
-
         .block-container {
             padding-top: 2rem !important;
             padding-left: 1rem !important;
@@ -443,179 +339,150 @@ render_html(
         .summary-value {
             font-size: 23px !important;
         }
-
     }
-
     </style>
     """
 )
 
 
 # ============================================================
-# LOAD MODEL
-# ============================================================
-
-
-# ============================================================
-# ENGINEERING DATABASE
+# POST-WELD ENGINEERING DATABASE
 # ============================================================
 
 DEFECT_DB = {
-
     "Burn Through-BT": {
         "severity": "HIGH",
-
         "causes": [
             "Excessive heat input",
             "Welding current may be too high",
             "Travel speed may be too low",
-            "Excessive root gap or unsuitable joint preparation"
+            "Excessive root gap or unsuitable joint preparation",
         ],
-
         "verification": [
             "Perform visual and dimensional inspection",
             "Assess penetration and remaining thickness",
-            "Use suitable NDT where required"
+            "Use suitable NDT where required",
         ],
-
         "recommendations": [
             "Review welding current and heat input",
             "Inspect the complete affected region",
-            "Repair or re-weld if acceptance limits are exceeded"
-        ]
+            "Repair or re-weld if acceptance limits are exceeded",
+        ],
     },
 
     "Contamination-CN": {
         "severity": "MEDIUM",
-
         "causes": [
             "Oil, oxide, rust or moisture contamination",
             "Poor surface preparation",
             "Contaminated filler material",
-            "Inadequate shielding"
+            "Inadequate shielding",
         ],
-
         "verification": [
             "Clean and visually inspect the region",
             "Review shielding conditions",
-            "Inspect nearby weld surface"
+            "Inspect nearby weld surface",
         ],
-
         "recommendations": [
             "Improve surface preparation",
             "Check filler and shielding conditions",
-            "Reinspect after corrective action"
-        ]
+            "Reinspect after corrective action",
+        ],
     },
 
     "Lack of Fusion-LOF": {
         "severity": "HIGH",
-
         "causes": [
             "Insufficient heat input",
             "Excessive travel speed",
             "Incorrect torch or electrode angle",
-            "Poor joint preparation"
+            "Poor joint preparation",
         ],
-
         "verification": [
             "Use UT or RT inspection where applicable",
             "Determine defect location and extent",
-            "Review joint preparation"
+            "Review joint preparation",
         ],
-
         "recommendations": [
             "Review welding procedure parameters",
             "Repair the affected region where required",
-            "Reinspect after repair"
-        ]
+            "Reinspect after repair",
+        ],
     },
 
     "Normal Weld-NW": {
         "severity": "LOW",
-
         "causes": [
-            "No major visible surface defect indicated by the current model"
+            "No major visible surface defect indicated by the current model",
         ],
-
         "verification": [
             "Perform routine visual inspection",
-            "Apply normal NDT requirements when applicable"
+            "Apply normal NDT requirements when applicable",
         ],
-
         "recommendations": [
             "Continue standard inspection procedures",
-            "Record the inspection result"
-        ]
+            "Record the inspection result",
+        ],
     },
 
     "Spatter-SR": {
         "severity": "LOW",
-
         "causes": [
             "Excessive welding current",
             "Incorrect voltage",
             "Unstable welding arc",
-            "Shielding instability"
+            "Shielding instability",
         ],
-
         "verification": [
             "Inspect after cleaning the surface",
-            "Check whether spatter obscures other discontinuities"
+            "Check whether spatter obscures other discontinuities",
         ],
-
         "recommendations": [
             "Remove excessive spatter",
             "Review current and voltage",
-            "Check welding arc stability"
-        ]
+            "Check welding arc stability",
+        ],
     },
 
     "Surface Crack-SC": {
         "severity": "CRITICAL",
-
         "causes": [
             "Residual welding stresses",
             "Rapid cooling",
             "Hydrogen-assisted cracking",
-            "Fatigue or stress concentration"
+            "Fatigue or stress concentration",
         ],
-
         "verification": [
             "Perform suitable NDT",
             "Determine crack depth and extent",
-            "Obtain qualified engineering evaluation"
+            "Obtain qualified engineering evaluation",
         ],
-
         "recommendations": [
             "Do not rely only on visual inspection",
             "Assess before continued service",
-            "Repair or replace affected region where required"
-        ]
+            "Repair or replace affected region where required",
+        ],
     },
 
     "Undercut-UC": {
         "severity": "MEDIUM",
-
         "causes": [
             "Excessive welding current",
             "High travel speed",
             "Incorrect torch or electrode angle",
-            "Improper welding technique"
+            "Improper welding technique",
         ],
-
         "verification": [
             "Measure actual undercut depth",
             "Compare with applicable acceptance criteria",
-            "Inspect the entire weld length"
+            "Inspect the entire weld length",
         ],
-
         "recommendations": [
             "Adjust welding current and travel speed",
             "Correct torch or electrode angle",
-            "Repair if allowable limits are exceeded"
-        ]
-    }
+            "Repair if allowable limits are exceeded",
+        ],
+    },
 }
 
 
@@ -624,18 +491,16 @@ DEFECT_DB = {
 # ============================================================
 
 def level_css(level):
-
     return {
         "LOW": "low",
         "MEDIUM": "medium",
         "HIGH": "high",
         "CRITICAL": "critical",
-        "UNCERTAIN": "uncertain"
+        "UNCERTAIN": "uncertain",
     }.get(level, "")
 
 
 def confidence_status(confidence):
-
     pct = confidence * 100
 
     if pct >= 70:
@@ -650,62 +515,18 @@ def confidence_status(confidence):
     return "VERY LOW", "Unverified AI indication"
 
 
-def calculate_severity(
-    base,
-    defect,
-    loading,
-    stress,
-    temperature
-):
-
-    levels = [
-        "LOW",
-        "MEDIUM",
-        "HIGH",
-        "CRITICAL"
-    ]
-
-    index = levels.index(base)
-
-    if (
-        loading == "Cyclic / Fatigue"
-        and defect in [
-            "Surface Crack-SC",
-            "Lack of Fusion-LOF",
-            "Undercut-UC"
-        ]
-    ):
-        index += 1
-
-    if stress >= 300:
-        index += 1
-
-    if temperature >= 400:
-        index += 1
-
-    return levels[min(index, 3)]
-
-
-def preliminary_risk(severity, confidence):
-
-    if confidence < 0.30:
-        return "UNCERTAIN"
-
-    return severity
-
-
 def summary_card(
     label,
     value,
     subtitle,
-    level=None
+    level=None,
 ):
-
     css = level_css(level)
 
     render_html(
         f"""
         <div class="summary-card">
+
             <div class="summary-label">
                 {html.escape(str(label))}
             </div>
@@ -717,6 +538,7 @@ def summary_card(
             <div class="summary-sub">
                 {html.escape(str(subtitle))}
             </div>
+
         </div>
         """
     )
@@ -726,12 +548,9 @@ def summary_card(
 # HEADER
 # ============================================================
 
-header_left, header_right = st.columns(
-    [5, 1]
-)
+header_left, header_right = st.columns([5, 1])
 
 with header_left:
-
     render_html(
         """
         <div class="brand-title">
@@ -746,7 +565,6 @@ with header_left:
     )
 
 with header_right:
-
     render_html(
         """
         <div style="text-align:right; padding-top:8px;">
@@ -756,7 +574,6 @@ with header_right:
         </div>
         """
     )
-
 
 st.divider()
 
@@ -768,7 +585,7 @@ st.divider()
 post_tab, pre_tab = st.tabs(
     [
         "🔍 Post-Weld Inspection",
-        "⚡ Pre / In-Process Prediction"
+        "⚡ Pre / In-Process Prediction",
     ]
 )
 
@@ -789,9 +606,7 @@ with post_tab:
         """
     )
 
-    st.markdown(
-        "## Inspect a Completed Weld"
-    )
+    st.markdown("## Inspect a Completed Weld")
 
     st.caption(
         "Upload a weld image and provide operating context. "
@@ -799,22 +614,14 @@ with post_tab:
         "a preliminary engineering interpretation."
     )
 
-
     left, right = st.columns(
         [0.9, 1.25],
-        gap="large"
+        gap="large",
     )
-
-
-    # ========================================================
-    # COMPONENT INFORMATION
-    # ========================================================
 
     with left:
 
-        st.markdown(
-            "### Component Information"
-        )
+        st.markdown("### Component Information")
 
         material = st.selectbox(
             "Material",
@@ -822,8 +629,8 @@ with post_tab:
                 "Carbon Steel",
                 "Stainless Steel",
                 "Aluminium",
-                "Unknown"
-            ]
+                "Unknown",
+            ],
         )
 
         component = st.selectbox(
@@ -833,8 +640,8 @@ with post_tab:
                 "Pipe",
                 "Beam / Structural Member",
                 "Pressure Component",
-                "Other"
-            ]
+                "Other",
+            ],
         )
 
         joint = st.selectbox(
@@ -844,8 +651,8 @@ with post_tab:
                 "Fillet Weld",
                 "Lap Weld",
                 "T-Joint",
-                "Unknown"
-            ]
+                "Unknown",
+            ],
         )
 
         loading = st.selectbox(
@@ -853,10 +660,9 @@ with post_tab:
             [
                 "Static",
                 "Cyclic / Fatigue",
-                "Unknown"
-            ]
+                "Unknown",
+            ],
         )
-
 
         input_a, input_b = st.columns(2)
 
@@ -867,7 +673,7 @@ with post_tab:
                 min_value=0.0,
                 max_value=1500.0,
                 value=100.0,
-                step=10.0
+                step=10.0,
             )
 
         with input_b:
@@ -877,23 +683,16 @@ with post_tab:
                 min_value=-100.0,
                 max_value=1200.0,
                 value=25.0,
-                step=5.0
+                step=5.0,
             )
-
-
-    # ========================================================
-    # IMAGE
-    # ========================================================
 
     with right:
 
-        st.markdown(
-            "### Inspection Image"
-        )
+        st.markdown("### Inspection Image")
 
         uploaded_file = st.file_uploader(
             "Upload JPG, JPEG or PNG",
-            type=["jpg", "jpeg", "png"]
+            type=["jpg", "jpeg", "png"],
         )
 
         image = None
@@ -907,9 +706,8 @@ with post_tab:
             st.image(
                 image,
                 caption="Image ready for analysis",
-                use_container_width=True
+                use_container_width=True,
             )
-
 
     st.write("")
 
@@ -918,19 +716,17 @@ with post_tab:
         min_value=0.05,
         max_value=0.80,
         value=0.20,
-        step=0.05
+        step=0.05,
     )
-
 
     run = st.button(
         "RUN AI INSPECTION",
         type="primary",
-        use_container_width=True
+        use_container_width=True,
     )
 
-
     # ========================================================
-    # RUN INSPECTION
+    # RUN POST-WELD MODEL
     # ========================================================
 
     if run:
@@ -947,32 +743,13 @@ with post_tab:
                 "Analysing weld image..."
             ):
 
-                image_array = np.array(image)
-
                 raw_output = run_post_weld_model(
-                    image_array,
+                    image,
                     conf=0.01,
-                    iou=0.45
+                    iou=0.45,
                 )
 
-
-            detections = []
-
-            for defect in raw_output["defects"]:
-
-                detections.append(
-                    {
-                        "name": defect["name"],
-                        "confidence": defect["confidence"]
-                    }
-                )
-    
-    
-                detections.sort(
-                    key=lambda item: item["confidence"],
-                    reverse=True
-                )
-
+            detections = raw_output["defects"]
 
             # ====================================================
             # NOTHING FOUND
@@ -993,14 +770,21 @@ with post_tab:
                     </div>
 
                     <div class="banner banner-warning">
-                        <b>No visual defect candidate was returned by the model.</b>
+
+                        <b>
+                            No visual defect candidate was returned
+                            by the model.
+                        </b>
+
                         <br><br>
+
                         This does not prove that the weld is defect-free.
-                        Manual inspection or appropriate NDT may still be required.
+                        Manual inspection or appropriate NDT may still
+                        be required.
+
                     </div>
                     """
                 )
-
 
             else:
 
@@ -1008,7 +792,6 @@ with post_tab:
 
                 defect = best["name"]
                 confidence = best["confidence"]
-
 
                 # =================================================
                 # BELOW ACCEPTANCE THRESHOLD
@@ -1030,7 +813,6 @@ with post_tab:
                         """
                     )
 
-
                     a, b, c = st.columns(3)
 
                     with a:
@@ -1038,7 +820,7 @@ with post_tab:
                         summary_card(
                             "HIGHEST AI CANDIDATE",
                             defect,
-                            "Low-confidence model tendency"
+                            "Low-confidence model tendency",
                         )
 
                     with b:
@@ -1046,7 +828,7 @@ with post_tab:
                         summary_card(
                             "CANDIDATE CONFIDENCE",
                             f"{confidence * 100:.1f}%",
-                            "Below selected threshold"
+                            "Below selected threshold",
                         )
 
                     with c:
@@ -1055,33 +837,39 @@ with post_tab:
                             "STATUS",
                             "UNVERIFIED",
                             "Manual verification required",
-                            "UNCERTAIN"
+                            "UNCERTAIN",
                         )
-
 
                     st.write("")
 
                     render_html(
                         f"""
                         <div class="banner banner-warning">
+
                             No prediction exceeded the selected
-                            <b>{threshold * 100:.0f}%</b>
+                            <b>
+                                {threshold * 100:.0f}%
+                            </b>
                             confidence threshold.
 
                             <br><br>
 
                             The strongest candidate was
-                            <b>{html.escape(defect)}</b>
+                            <b>
+                                {html.escape(defect)}
+                            </b>
                             at
-                            <b>{confidence * 100:.1f}%</b>.
+                            <b>
+                                {confidence * 100:.1f}%
+                            </b>.
 
                             <br><br>
 
                             Treat this as an AI indication only.
+
                         </div>
                         """
                     )
-
 
                 # =================================================
                 # ACCEPTED DETECTION
@@ -1095,55 +883,42 @@ with post_tab:
                         )
                     )
 
-
                     data = DEFECT_DB.get(
                         defect,
                         {
                             "severity": "MEDIUM",
-
                             "causes": [
                                 "Further engineering assessment required"
                             ],
-
                             "verification": [
                                 "Qualified inspection required"
                             ],
-
                             "recommendations": [
                                 "Further inspection recommended"
-                            ]
-                        }
+                            ],
+                        },
                     )
-
 
                     severity = calculate_severity(
                         data["severity"],
                         defect,
                         loading,
                         stress,
-                        temperature
+                        temperature,
                     )
-
 
                     risk = preliminary_risk(
                         severity,
-                        confidence
+                        confidence,
                     )
-
 
                     accepted_output = run_post_weld_model(
-                        image_array,
+                        image,
                         conf=threshold,
-                        iou=0.45
+                        iou=0.45,
                     )
 
-
                     overlay = accepted_output["overlay"]
-
-
-                    # =================================================
-                    # RESULT HEADER
-                    # =================================================
 
                     st.divider()
 
@@ -1159,31 +934,23 @@ with post_tab:
                         """
                     )
 
-
-                    # =================================================
-                    # SUMMARY CARDS
-                    # =================================================
-
                     s1, s2, s3, s4 = st.columns(4)
-
 
                     with s1:
 
                         summary_card(
                             "DETECTED INDICATION",
                             defect,
-                            "Highest-confidence AI detection"
+                            "Highest-confidence AI detection",
                         )
-
 
                     with s2:
 
                         summary_card(
                             "AI CONFIDENCE",
                             f"{confidence * 100:.1f}%",
-                            confidence_text
+                            confidence_text,
                         )
-
 
                     with s3:
 
@@ -1191,9 +958,8 @@ with post_tab:
                             "PRELIMINARY SEVERITY",
                             severity,
                             "Rule-based interpretation",
-                            severity
+                            severity,
                         )
-
 
                     with s4:
 
@@ -1201,25 +967,24 @@ with post_tab:
                             "PRELIMINARY RISK",
                             risk,
                             "Not a certified failure prediction",
-                            risk
+                            risk,
                         )
 
-
                     st.write("")
-
-
-                    # =================================================
-                    # CONFIDENCE BANNER
-                    # =================================================
 
                     if confidence >= 0.70:
 
                         render_html(
                             """
                             <div class="banner banner-good">
-                                <b>Strong AI visual indication.</b>
+
+                                <b>
+                                    Strong AI visual indication.
+                                </b>
+
                                 The model has relatively high confidence.
                                 Engineering verification is still recommended.
+
                             </div>
                             """
                         )
@@ -1229,8 +994,14 @@ with post_tab:
                         render_html(
                             """
                             <div class="banner banner-warning">
-                                <b>Moderate / low-confidence AI detection.</b>
-                                Confirm this indication manually or using suitable NDT.
+
+                                <b>
+                                    Moderate / low-confidence AI detection.
+                                </b>
+
+                                Confirm this indication manually or using
+                                suitable NDT.
+
                             </div>
                             """
                         )
@@ -1240,25 +1011,29 @@ with post_tab:
                         render_html(
                             """
                             <div class="banner banner-danger">
-                                <b>Low-confidence AI detection.</b>
-                                Do not make an engineering decision from this result alone.
+
+                                <b>
+                                    Low-confidence AI detection.
+                                </b>
+
+                                Do not make an engineering decision from
+                                this result alone.
+
                             </div>
                             """
                         )
-
 
                     # =================================================
                     # IMAGE COMPARISON
                     # =================================================
 
                     st.write("")
+
                     st.markdown(
                         "### Visual Inspection"
                     )
 
-
                     im1, im2 = st.columns(2)
-
 
                     with im1:
 
@@ -1268,9 +1043,8 @@ with post_tab:
 
                         st.image(
                             image,
-                            use_container_width=True
+                            use_container_width=True,
                         )
-
 
                     with im2:
 
@@ -1280,19 +1054,18 @@ with post_tab:
 
                         st.image(
                             overlay,
-                            use_container_width=True
+                            use_container_width=True,
                         )
-
 
                     # =================================================
                     # DETECTED INDICATIONS
                     # =================================================
 
                     st.write("")
+
                     st.markdown(
                         "### Detected Indications"
                     )
-
 
                     accepted = [
                         item
@@ -1300,18 +1073,33 @@ with post_tab:
                         if item["confidence"] >= threshold
                     ]
 
-
                     rows = ""
 
                     for item in accepted[:10]:
 
                         rows += (
                             '<div class="detection-row">'
-                            f'<div class="detection-name">{html.escape(item["name"])}</div>'
-                            f'<div class="detection-confidence">{item["confidence"] * 100:.1f}%</div>'
+                            f'<div class="detection-name">'
+                            f'{html.escape(item["name"])}'
+                            '</div>'
+                            f'<div class="detection-confidence">'
+                            f'{item["confidence"] * 100:.1f}%'
+                            '</div>'
                             '</div>'
                         )
 
+                    if not rows:
+
+                        rows = (
+                            '<div class="detection-row">'
+                            '<div class="detection-name">'
+                            'No accepted detections'
+                            '</div>'
+                            '<div class="detection-confidence">'
+                            '—'
+                            '</div>'
+                            '</div>'
+                        )
 
                     render_html(
                         f"""
@@ -1321,85 +1109,115 @@ with post_tab:
                         """
                     )
 
-
                     # =================================================
                     # COMPONENT CONTEXT
                     # =================================================
 
                     st.write("")
+
                     st.markdown(
                         "### Component Context"
                     )
 
-
                     p1, p2, p3 = st.columns(3)
-
 
                     with p1:
 
                         render_html(
                             f"""
                             <div class="panel">
-                                <div class="context-label">MATERIAL</div>
-                                <div class="context-value">{html.escape(material)}</div>
+
+                                <div class="context-label">
+                                    MATERIAL
+                                </div>
+
+                                <div class="context-value">
+                                    {html.escape(material)}
+                                </div>
 
                                 <br>
 
-                                <div class="context-label">COMPONENT</div>
-                                <div class="context-value">{html.escape(component)}</div>
+                                <div class="context-label">
+                                    COMPONENT
+                                </div>
+
+                                <div class="context-value">
+                                    {html.escape(component)}
+                                </div>
+
                             </div>
                             """
                         )
-
 
                     with p2:
 
                         render_html(
                             f"""
                             <div class="panel">
-                                <div class="context-label">JOINT TYPE</div>
-                                <div class="context-value">{html.escape(joint)}</div>
+
+                                <div class="context-label">
+                                    JOINT TYPE
+                                </div>
+
+                                <div class="context-value">
+                                    {html.escape(joint)}
+                                </div>
 
                                 <br>
 
-                                <div class="context-label">LOADING</div>
-                                <div class="context-value">{html.escape(loading)}</div>
+                                <div class="context-label">
+                                    LOADING
+                                </div>
+
+                                <div class="context-value">
+                                    {html.escape(loading)}
+                                </div>
+
                             </div>
                             """
                         )
-
 
                     with p3:
 
                         render_html(
                             f"""
                             <div class="panel">
-                                <div class="context-label">APPLIED STRESS</div>
-                                <div class="context-value">{stress:.1f} MPa</div>
+
+                                <div class="context-label">
+                                    APPLIED STRESS
+                                </div>
+
+                                <div class="context-value">
+                                    {stress:.1f} MPa
+                                </div>
 
                                 <br>
 
-                                <div class="context-label">TEMPERATURE</div>
-                                <div class="context-value">{temperature:.1f} °C</div>
+                                <div class="context-label">
+                                    TEMPERATURE
+                                </div>
+
+                                <div class="context-value">
+                                    {temperature:.1f} °C
+                                </div>
+
                             </div>
                             """
                         )
-
 
                     # =================================================
                     # ROOT CAUSES
                     # =================================================
 
                     st.write("")
+
                     st.markdown(
                         "### Probable Root-Cause Factors"
                     )
 
-
                     causes = list(
                         data["causes"]
                     )
-
 
                     if (
                         defect == "Surface Crack-SC"
@@ -1410,13 +1228,11 @@ with post_tab:
                             "Cyclic loading may increase fatigue-related crack concern"
                         )
 
-
                     if stress >= 300:
 
                         causes.append(
                             "High service stress may increase defect significance"
                         )
-
 
                     if temperature >= 400:
 
@@ -1424,12 +1240,10 @@ with post_tab:
                             "Elevated temperature may influence weld behaviour"
                         )
 
-
                     root_html = "<br>".join(
                         f"• {html.escape(item)}"
                         for item in causes
                     )
-
 
                     render_html(
                         f"""
@@ -1439,27 +1253,25 @@ with post_tab:
                         """
                     )
 
-
                     st.caption(
-                        "These are probable associated factors, not proof of the exact cause."
+                        "These are probable associated factors, "
+                        "not proof of the exact cause."
                     )
-
 
                     # =================================================
                     # VERIFICATION
                     # =================================================
 
                     st.write("")
+
                     st.markdown(
                         "### Recommended Verification"
                     )
-
 
                     verification_html = "<br>".join(
                         f"• {html.escape(item)}"
                         for item in data["verification"]
                     )
-
 
                     render_html(
                         f"""
@@ -1469,27 +1281,25 @@ with post_tab:
                         """
                     )
 
-
                     # =================================================
                     # ENGINEERING RECOMMENDATION
                     # =================================================
 
                     st.write("")
+
                     st.markdown(
                         "### Engineering Recommendation"
                     )
-
 
                     recommendations = list(
                         data["recommendations"]
                     )
 
-
                     if (
                         loading == "Cyclic / Fatigue"
                         and severity in [
                             "HIGH",
-                            "CRITICAL"
+                            "CRITICAL",
                         ]
                     ):
 
@@ -1497,12 +1307,10 @@ with post_tab:
                             "Consider fatigue-related engineering assessment before continued cyclic operation"
                         )
 
-
                     recommendation_html = "<br>".join(
                         f"• {html.escape(item)}"
                         for item in recommendations
                     )
-
 
                     render_html(
                         f"""
@@ -1511,7 +1319,6 @@ with post_tab:
                         </div>
                         """
                     )
-
 
                     # =================================================
                     # EXPLANATION
@@ -1529,7 +1336,7 @@ with post_tab:
 Generated by your trained YOLO model.
 
 **AI confidence**  
-Generated directly by YOLO.
+Generated directly by YOLO. This is a detection score, not a calibrated probability.
 
 **Preliminary severity**  
 Currently generated using rule-based engineering logic.
@@ -1567,123 +1374,408 @@ with pre_tab:
     )
 
     st.caption(
-        "This module will predict defect and distortion risk "
-        "using actual welding-process parameters."
+        "Select a welding process. The input parameters change with "
+        "the selected process, and an AI result is shown only when "
+        "a trained process-specific model is actually available."
     )
 
+    # ========================================================
+    # PROCESS DROPDOWN
+    # ========================================================
 
-    a, b, c = st.columns(3)
+    process_names = get_process_names()
 
+    process = st.selectbox(
+        "Welding Process",
+        process_names,
+        key="pre_welding_process",
+    )
 
-    with a:
-
-        st.selectbox(
-            "Welding Process",
-            [
-                "MIG / GMAW",
-                "TIG / GTAW",
-                "SMAW",
-                "Submerged Arc Welding",
-                "Unknown"
-            ],
-            key="pre_process"
-        )
-
-        st.number_input(
-            "Current (A)",
-            0.0,
-            1000.0,
-            180.0,
-            key="pre_current"
-        )
-
-        st.number_input(
-            "Voltage (V)",
-            0.0,
-            100.0,
-            24.0,
-            key="pre_voltage"
-        )
-
-
-    with b:
-
-        st.number_input(
-            "Travel Speed (mm/s)",
-            0.0,
-            100.0,
-            6.0,
-            key="pre_speed"
-        )
-
-        st.number_input(
-            "Torch / Electrode Angle (°)",
-            0.0,
-            90.0,
-            45.0,
-            key="pre_angle"
-        )
-
-        st.number_input(
-            "Wire Feed Speed",
-            0.0,
-            100.0,
-            5.0,
-            key="pre_wire"
-        )
-
-
-    with c:
-
-        st.number_input(
-            "Plate Thickness (mm)",
-            0.1,
-            100.0,
-            6.0,
-            key="pre_thickness"
-        )
-
-        st.selectbox(
-            "Material",
-            [
-                "Carbon Steel",
-                "Stainless Steel",
-                "Aluminium"
-            ],
-            key="pre_material"
-        )
-
-        st.selectbox(
-            "Joint Type",
-            [
-                "Butt Joint",
-                "T-Joint",
-                "Lap Joint",
-                "Corner Joint"
-            ],
-            key="pre_joint"
-        )
-
+    process_config = get_process_config(
+        process
+    )
 
     st.write("")
 
-    st.button(
-        "PREDICT DEFECT & DISTORTION RISK",
-        disabled=True,
-        use_container_width=True
+    # ========================================================
+    # PROCESS STATUS
+    # ========================================================
+
+    model_status = (
+        "Trained model available"
+        if process_config["model_available"]
+        else "Configuration available — trained model not connected"
     )
 
-
     render_html(
-        """
-        <div class="banner banner-warning">
-            <b>Predictive ML model not trained yet.</b>
-            <br><br>
-            This section will be activated after we train the
-            pre-weld defect and distortion prediction model.
+        f"""
+        <div class="panel">
+
+            <div class="context-label">
+                SELECTED PROCESS
+            </div>
+
+            <div class="context-value">
+                {html.escape(process)}
+            </div>
+
+            <br>
+
+            <div class="context-label">
+                MODEL STATUS
+            </div>
+
+            <div class="context-value">
+                {html.escape(model_status)}
+            </div>
+
+            <br>
+
+            <div class="context-label">
+                PREDICTION TYPE
+            </div>
+
+            <div class="context-value">
+                {html.escape(process_config["prediction_type"])}
+            </div>
+
+            <br>
+
+            <div class="context-label">
+                DESCRIPTION
+            </div>
+
+            <div class="context-value">
+                {html.escape(process_config["description"])}
+            </div>
+
         </div>
         """
     )
+
+    # ========================================================
+    # DYNAMIC PARAMETERS
+    # ========================================================
+
+    st.write("")
+
+    st.markdown(
+        "### Process Parameters"
+    )
+
+    parameters = process_config["parameters"]
+
+    parameter_values = {}
+
+    parameter_columns = st.columns(3)
+
+    for index, parameter in enumerate(parameters):
+
+        column = parameter_columns[
+            index % 3
+        ]
+
+        with column:
+
+            parameter_values[
+                parameter["key"]
+            ] = st.number_input(
+                f'{parameter["label"]} ({parameter["unit"]})',
+                min_value=float(
+                    parameter["min"]
+                ),
+                max_value=float(
+                    parameter["max"]
+                ),
+                value=float(
+                    parameter["default"]
+                ),
+                step=float(
+                    parameter["step"]
+                ),
+                key=(
+                    f'pre_{process}_'
+                    f'{parameter["key"]}'
+                ),
+            )
+
+    st.write("")
+
+    # ========================================================
+    # PROCESS-SPECIFIC BUTTON
+    # ========================================================
+
+    if process_config["model_available"]:
+
+        predict_button_label = (
+            "PREDICT CRACK RISK"
+        )
+
+    else:
+
+        predict_button_label = (
+            "CHECK PROCESS MODEL STATUS"
+        )
+
+    predict_clicked = st.button(
+        predict_button_label,
+        type="primary",
+        use_container_width=True,
+        key="pre_predict_button",
+    )
+
+    # ========================================================
+    # RESULT
+    # ========================================================
+
+    if predict_clicked:
+
+        # ----------------------------------------------------
+        # NO MODEL FOR THIS PROCESS
+        # ----------------------------------------------------
+
+        if not process_config["model_available"]:
+
+            render_html(
+                f"""
+                <div class="banner banner-warning">
+
+                    <b>
+                        No trained AI model is connected for
+                        {html.escape(process)} yet.
+                    </b>
+
+                    <br><br>
+
+                    The process-specific parameters are implemented
+                    in the interface, but this prototype will not
+                    generate a fake prediction.
+
+                    A dedicated dataset, training workflow, and
+                    validation are required before this process can
+                    produce an AI result.
+
+                </div>
+                """
+            )
+
+        # ----------------------------------------------------
+        # ACTUAL LASER MODEL
+        # ----------------------------------------------------
+
+        else:
+
+            try:
+
+                result = predict_crack_risk(
+                    power=parameter_values["power"],
+                    welding_speed=parameter_values[
+                        "welding_speed"
+                    ],
+                    gas_flow_rate=parameter_values[
+                        "gas_flow_rate"
+                    ],
+                    focal_position=parameter_values[
+                        "focal_position"
+                    ],
+                    angular_position=parameter_values[
+                        "angular_position"
+                    ],
+                    material_strength=parameter_values[
+                        "material_strength"
+                    ],
+                )
+
+                score = result[
+                    "crack_risk_score"
+                ]
+
+                prediction = result[
+                    "result"
+                ]
+
+                st.divider()
+
+                render_html(
+                    """
+                    <div class="section-kicker">
+                        PRE-WELD AI RESULT
+                    </div>
+
+                    <div class="result-heading">
+                        Crack-Risk Assessment
+                    </div>
+                    """
+                )
+
+                r1, r2, r3 = st.columns(3)
+
+                # --------------------------------------------
+                # PREDICTION
+                # --------------------------------------------
+
+                with r1:
+
+                    summary_card(
+                        "PREDICTION",
+                        prediction,
+                        "Random Forest classification result",
+                        (
+                            "HIGH"
+                            if result["prediction"] == 1
+                            else "LOW"
+                        ),
+                    )
+
+                # --------------------------------------------
+                # SCORE
+                # --------------------------------------------
+
+                if score >= 0.70:
+
+                    score_level = "HIGH"
+
+                elif score >= 0.30:
+
+                    score_level = "MEDIUM"
+
+                else:
+
+                    score_level = "LOW"
+
+                with r2:
+
+                    summary_card(
+                        "CRACK-RISK SCORE",
+                        f"{score * 100:.1f}%",
+                        "Model score; not a calibrated probability",
+                        score_level,
+                    )
+
+                # --------------------------------------------
+                # MODEL
+                # --------------------------------------------
+
+                with r3:
+
+                    summary_card(
+                        "MODEL",
+                        result["model_type"],
+                        "Process-specific model currently connected",
+                    )
+
+                st.write("")
+
+                render_html(
+                    """
+                    <div class="banner banner-warning">
+
+                        <b>
+                            Experimental model limitation.
+                        </b>
+
+                        <br><br>
+
+                        This model was trained on the available
+                        WSteel laser-welding dataset. It is intended
+                        as an experimental decision-support component
+                        within the observed parameter space and has
+                        not been validated for reliable generalization
+                        to unseen welding conditions.
+
+                        <br><br>
+
+                        This result does not predict distortion and
+                        should not be used as a certified welding
+                        procedure or acceptance decision.
+
+                    </div>
+                    """
+                )
+
+                st.write("")
+
+                with st.expander(
+                    "How was this pre-weld result generated?"
+                ):
+
+                    st.markdown(
+                        """
+**Welding process**  
+Laser Welding.
+
+**Model**  
+Random Forest classifier trained on the project's cleaned WSteel pre-weld dataset.
+
+**Inputs**  
+Power, welding speed, gas flow rate, focal position, angular position, and the dataset's material-strength field.
+
+**Output**  
+Crack-risk classification and a model crack-risk score.
+
+**Important limitation**  
+The score is not a calibrated probability. The model also showed poor generalization when entire welding conditions were held out during evaluation.
+
+**Other welding processes**  
+MIG/GMAW, TIG/GTAW, SMAW, Submerged Arc Welding, and Resistance Spot Welding currently have interface configurations only. They require their own suitable datasets and validated models before AI predictions are enabled.
+"""
+                    )
+
+            except Exception as exc:
+
+                st.error(
+                    "The pre-weld model could not generate a prediction."
+                )
+
+                st.exception(exc)
+
+    # ========================================================
+    # INITIAL STATUS
+    # ========================================================
+
+    else:
+
+        if process_config["model_available"]:
+
+            render_html(
+                """
+                <div class="banner banner-good">
+
+                    <b>
+                        AI model ready.
+                    </b>
+
+                    <br><br>
+
+                    Enter the process parameters above and click
+                    <b>PREDICT CRACK RISK</b> to run the trained
+                    laser-welding pre-weld model.
+
+                </div>
+                """
+            )
+
+        else:
+
+            render_html(
+                f"""
+                <div class="banner banner-warning">
+
+                    <b>
+                        {html.escape(process)}
+                        model is not trained yet.
+                    </b>
+
+                    <br><br>
+
+                    The dropdown and process-specific parameters are
+                    active, but AI prediction remains disabled for
+                    this process until a dedicated dataset and
+                    validated model are added.
+
+                </div>
+                """
+            )
 
 
 # ============================================================
